@@ -5,51 +5,55 @@ using System.Reflection;
 
 namespace MicroFlow.Graph
 {
-  class Program
-  {
-    static void Main(string[] args)
+    class Program
     {
-      if (args.Length != 2)
-      {
-        Console.WriteLine("Usage: MicroFlow.Graph path_to_assembly flow_class_name");
-        return;
-      }
-
-      string path = args[0];
-      string className = args[1];
-      string output = Path.Combine(Path.GetDirectoryName(path).NotNull(), className + ".dgml");
-
-      try
-      {
-        Console.WriteLine("Load assembly...");
-        var assembly = Assembly.LoadFrom(path);
-
-        Console.WriteLine("Search type...");
-        var flowType = assembly.GetTypes().FirstOrDefault(t => t.Name == className);
-
-        if (flowType == null)
+        static void Main(string[] args)
         {
-          Console.WriteLine("Type not found");
-          return;
+            if (args.Length != 2)
+            {
+                Console.WriteLine("Usage: MicroFlow.Graph assembly-file-path output-dir");
+                return;
+            }
+
+            var assemblyFilePath = args[0];
+            var outputDir = args[1];
+
+            try
+            {
+                Console.WriteLine("Load assembly...");
+                var assembly = Assembly.LoadFrom(assemblyFilePath);
+                var workflowTypes = assembly.GetTypes()
+                    .Where(t => t.IsSubclassOf(typeof(Flow)))
+                    .ToArray();
+
+                if (!workflowTypes.Any())
+                {
+                    throw new Exception($"No type found in '{assemblyFilePath}' that implements the Flow type!");
+                }
+
+                foreach (var workflowType in workflowTypes)
+                {
+                    Console.WriteLine($"Type {workflowType.FullName} found");
+
+                    Console.WriteLine("Extract flow description...");
+                    var flowDescription = FlowDescriptionExtractor.ExtractFrom(workflowType);
+
+                    Console.WriteLine("Generate graph...");
+                    var graph = new FlowGraphBuilder().GenerateDgml(flowDescription);
+
+                    var outputFile = Path.Combine(outputDir, workflowType.FullName.Replace(".", "\\")) + ".dgml";
+                    Directory.CreateDirectory(Path.GetDirectoryName(outputFile));
+                    Console.WriteLine($"Save to file {outputFile}");
+                    graph.Save(outputFile);
+                }
+
+                Console.WriteLine("Done!");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error: {ex.Message}");
+                Environment.Exit(1);
+            }
         }
-
-        Console.WriteLine($"Type {flowType.FullName} found");
-
-        Console.WriteLine("Extract flow description...");
-        var flowDescription = FlowDescriptionExtractor.ExtractFrom(flowType);
-
-        Console.WriteLine("Generate graph...");
-        var graph = new FlowGraphBuilder().GenerateDgml(flowDescription);
-
-        Console.WriteLine($"Save to {output}");
-        graph.Save(output);
-
-        Console.WriteLine("Done!");
-      }
-      catch (Exception ex)
-      {
-        Console.WriteLine($"Error: {ex.Message}");
-      }
     }
-  }
 }
